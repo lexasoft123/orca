@@ -1,3 +1,4 @@
+import { isRecord } from '../agent-status/child-work/agent-status-child-work-value-guards'
 import { cleanCloudServiceOrigin, cleanCloudServiceUrl } from '../network/cloud-service-url'
 
 export type CustomCloudServerSettings = {
@@ -18,10 +19,10 @@ export function validateCustomCloudServer(
   value: unknown,
   allowLoopbackHttp: boolean
 ): CustomCloudServerSettings | null {
-  if (!value || typeof value !== 'object') {
+  if (!isRecord(value)) {
     return null
   }
-  const candidate = value as Partial<CustomCloudServerSettings>
+  const candidate = value
   if (typeof candidate.enabled !== 'boolean') {
     return null
   }

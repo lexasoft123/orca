@@ -64,7 +64,11 @@ export function getOrcaCloudAuthConfig(
     env.ORCA_CLOUD_API_URL?.trim() || custom?.authServerUrl || PRODUCTION_API_BASE_URL
   )
   const clientId = env.ORCA_CLOUD_CLIENT_ID?.trim() || custom?.clientId || PRODUCTION_CLIENT_ID
-  if (!apiBaseUrl || !clientId) {
+  const relayDirectorUrl = cleanOrigin(
+    env.ORCA_RELAY_URL?.trim() || custom?.relayDirectorUrl || PRODUCTION_RELAY_DIRECTOR_URL,
+    allowLoopbackHttp
+  )
+  if (!apiBaseUrl || !clientId || !relayDirectorUrl) {
     return {
       configured: false,
       setupMessage: 'Orca Cloud sign-in is not configured for this build.'
@@ -102,11 +106,7 @@ export function getOrcaCloudAuthConfig(
       connectorTokenEndpoint:
         cleanEndpointUrl(env.ORCA_CLOUD_CONNECTOR_TOKEN_URL) ??
         endpoint(apiBaseUrl, '/v1/desktop/auth/connector-token'),
-      relayDirectorUrl:
-        cleanOrigin(
-          env.ORCA_RELAY_URL?.trim() || custom?.relayDirectorUrl || PRODUCTION_RELAY_DIRECTOR_URL,
-          allowLoopbackHttp
-        ) ?? PRODUCTION_RELAY_DIRECTOR_URL,
+      relayDirectorUrl,
       clientId,
       scope: env.ORCA_CLOUD_AUTH_SCOPE?.trim() || DEFAULT_SCOPE
     }
