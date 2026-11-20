@@ -69,6 +69,10 @@ export class RelayRevokeOutbox {
     return item
   }
 
+  hasUnscopedBindings(): boolean {
+    return this.outboxUnreadable || this.items.some((item) => !item.relayDirectorUrl)
+  }
+
   bindUnscopedTo(relayDirectorUrl: string): void {
     const next = this.items.map((item) =>
       item.relayDirectorUrl ? item : { ...item, relayDirectorUrl }

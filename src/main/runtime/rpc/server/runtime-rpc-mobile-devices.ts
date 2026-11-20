@@ -24,10 +24,9 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
     return revoked
   }
 
-  async revokeCloudRelayPairings(relayDirectorUrl: string): Promise<void> {
+  async revokeCloudRelayPairings(relayDirectorUrl: string | null): Promise<void> {
     this.mobilePairingOfferGeneration += 1
     await this.mobileRelayPairingOfferQueue
-    this.relayRevokeOutbox.bindUnscopedTo(relayDirectorUrl)
     const registry = this.deviceRegistry
     if (!registry) {
       throw new Error('device_registry_unavailable')
@@ -35,8 +34,20 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
     const devices = registry
       .listDevices()
       .filter((device) => device.scope === 'mobile' && device.relayBinding)
+    if (
+      !relayDirectorUrl &&
+      (this.relayRevokeOutbox.hasUnscopedBindings() ||
+        devices.some((device) => !device.relayBinding?.relayDirectorUrl))
+    ) {
+      throw new Error(
+        'Restore the previous relay server configuration before switching servers; legacy relay bindings have no known director.'
+      )
+    }
+    if (relayDirectorUrl) {
+      this.relayRevokeOutbox.bindUnscopedTo(relayDirectorUrl)
+    }
     for (const device of devices) {
-      if (device.relayBinding && !device.relayBinding.relayDirectorUrl) {
+      if (relayDirectorUrl && device.relayBinding && !device.relayBinding.relayDirectorUrl) {
         registry.setRelayBinding(device.deviceId, { ...device.relayBinding, relayDirectorUrl })
       }
     }
@@ -68,6 +79,7 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
         return
       }
       visited.add(device.deviceId)
+      // Descendants inherit revoked authority, including local-only devices the parent created.
       for (const child of paired) {
         if (
           child.parentDeviceId === device.deviceId ||
