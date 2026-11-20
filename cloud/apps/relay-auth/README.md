@@ -38,3 +38,14 @@ A session object is `{accessToken, refreshToken, expiresAt, cloud, organizations
 ## Relay configuration
 
 Build each Dockerfile from the `cloud/` context. The relay-auth Docker image has not been built or tested in this environment because Docker was unavailable. For a combined relay set `ORCA_RELAY_ROLE=combined`, `ORCA_RELAY_PUBLIC_URL` and `ORCA_RELAY_CELL_URL` to its public HTTPS origin, `ORCA_RELAY_AUTH_ISSUER` to the auth public origin, `ORCA_RELAY_AUTH_AUDIENCE=orca-relay`, `ORCA_RELAY_JWKS_URL` to the auth origin's `/.well-known/jwks.json`, `ORCA_RELAY_ASSIGNMENT_SIGNING_KEY` to a separate random secret of at least 32 characters, `ORCA_RELAY_ADMIN_AUDIENCE` to a URL, `ORCA_RELAY_DEPLOY_SERVICE_ACCOUNT` to an email, `ORCA_RELAY_PUBLIC_ASSIGNMENTS_ENABLED=true`, and `ORCA_RELAY_DATA_DIR` to persistent storage. See the relay README for network and operational configuration.
+
+
+## Desktop relay end-to-end test
+
+After installing dependencies in the repository root and `cloud/`, run from the root:
+
+```sh
+ORCA_BACKGROUND_LAUNCH=1 timeout 900 pnpm run test:e2e:custom-relay
+```
+
+The test builds the required cloud packages and E2E desktop, starts the auth service and a combined SQLite relay on loopback, and drives an isolated hidden desktop profile through Settings. It generates a temporary certificate with OpenSSL and puts loopback HTTPS proxies in front of both HTTP services, including WebSocket upgrades; the temporary CA is trusted only by the test processes, with Electron accepting that exact certificate for loopback. This preserves the phone protocol's HTTPS requirement. It checks connection failures and success, sign-in, relay assignment, an encrypted mobile RPC, outage recovery, and switching to a second unreachable local server. The CDP screenshot is written to `.cache/relay-e2e/settings-connected.png`. OpenSSL and Node 24 or newer are required.
