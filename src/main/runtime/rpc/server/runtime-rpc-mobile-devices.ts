@@ -24,6 +24,31 @@ export class RuntimeRpcMobileDevices extends RuntimeRpcRequestAdmission {
     return revoked
   }
 
+  async revokeCloudRelayPairings(relayDirectorUrl: string): Promise<void> {
+    this.mobilePairingOfferGeneration += 1
+    await this.mobileRelayPairingOfferQueue
+    this.relayRevokeOutbox.bindUnscopedTo(relayDirectorUrl)
+    const registry = this.deviceRegistry
+    if (!registry) {
+      throw new Error('device_registry_unavailable')
+    }
+    const devices = registry
+      .listDevices()
+      .filter((device) => device.scope === 'mobile' && device.relayBinding)
+    for (const device of devices) {
+      if (device.relayBinding && !device.relayBinding.relayDirectorUrl) {
+        registry.setRelayBinding(device.deviceId, { ...device.relayBinding, relayDirectorUrl })
+      }
+    }
+    const current = devices
+      .map((device) => registry.getDevice(device.deviceId))
+      .filter((device): device is DeviceEntry => device !== null)
+    if (!this.revokeDevicesNow(current)) {
+      throw new Error('relay_pairing_cleanup_failed')
+    }
+    this.mobileDesktopRelay?.phonesChanged()
+  }
+
   revokeRuntimeAccess(deviceId: string): boolean {
     const device = this.deviceRegistry?.getDevice(deviceId)
     return device?.scope === 'runtime' && this.revokeDevicesNow([device])

@@ -1,3 +1,4 @@
+import { SIGNED_OUT } from './connector-cloud-request'
 import { getAppEnvironment } from '../../shared/app-lifecycle/app-environment'
 import { runtimeConversationHost } from '../external-conversations/external-conversation-runtime-host'
 import { getOrcaCloudAuthConfig } from '../orca-profiles/cloud-auth/profile-cloud-auth-config'
@@ -108,7 +109,12 @@ export function createConnectorCloud({
     origin: resolveConnectorOrigin(process.env, environment.isPackaged()),
     isFenced,
     account: () => connectorAccount(userDataPath),
-    mintFor: (account) => desktopConnectorTokenMint(auth.config, userDataPath, account),
+    mintFor: (account) => async () => {
+      const current = getOrcaCloudAuthConfig()
+      return current.configured
+        ? desktopConnectorTokenMint(current.config, userDataPath, account)()
+        : SIGNED_OUT
+    },
     onStatusChanged: () => runtime.notifyBotsChanged({ kinds: ['settings'] }),
     onAccountSwitched: cancelConnectorConnectsForAccountChange,
     replyJournal: () => getStructuredAgentSessionHost()?.deps.store.connectorReplies() ?? null,
