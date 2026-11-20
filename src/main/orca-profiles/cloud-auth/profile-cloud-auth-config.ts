@@ -1,4 +1,9 @@
 import {
+  DEFAULT_CLOUD_SERVER,
+  validateCustomCloudServer,
+  type CustomCloudServerSettings
+} from '../../../shared/settings/custom-cloud-server'
+import {
   cleanCloudServiceUrl as cleanUrl,
   cleanCloudServiceOrigin as cleanOrigin
 } from '../../../shared/network/cloud-service-url'
@@ -22,9 +27,15 @@ export type OrcaCloudAuthConfig = {
 }
 
 const DEFAULT_SCOPE = 'openid profile email offline_access'
-const PRODUCTION_API_BASE_URL = 'https://login.onorca.dev'
-const PRODUCTION_CLIENT_ID = 'orca-desktop'
-const PRODUCTION_RELAY_DIRECTOR_URL = 'https://relay.onorca.dev'
+const PRODUCTION_API_BASE_URL = DEFAULT_CLOUD_SERVER.authServerUrl
+const PRODUCTION_CLIENT_ID = DEFAULT_CLOUD_SERVER.clientId
+const PRODUCTION_RELAY_DIRECTOR_URL = DEFAULT_CLOUD_SERVER.relayDirectorUrl
+
+let readCustomServer: () => CustomCloudServerSettings | undefined = () => undefined
+
+export function installCloudServerSettingsReader(reader: typeof readCustomServer): void {
+  readCustomServer = reader
+}
 
 // Packaged main omits NODE_ENV; use packaged status to gate development auth overrides.
 // No installed environment (a bare Node import) reads as unpackaged, as Electron's absent `app` did.
@@ -38,20 +49,21 @@ function endpoint(baseUrl: string, path: string): string {
 
 export function getOrcaCloudAuthConfig(
   env: NodeJS.ProcessEnv = process.env,
-  packaged: boolean = isPackagedOrcaBuild()
+  packaged: boolean = isPackagedOrcaBuild(),
+  saved: CustomCloudServerSettings | undefined = readCustomServer()
 ): { configured: true; config: OrcaCloudAuthConfig } | { configured: false; setupMessage: string } {
   // Plain HTTP token endpoints are development-only.
   const allowLoopbackHttp = !packaged
   const cleanEndpointUrl = (value: string | undefined): string | null =>
     cleanUrl(value, allowLoopbackHttp)
-  const configuredApiBaseUrl = env.ORCA_CLOUD_API_URL?.trim()
-  // Packaged builds need defaults; first-party endpoints and public client IDs are not secrets.
-  const apiBaseUrl = configuredApiBaseUrl
-    ? cleanEndpointUrl(configuredApiBaseUrl)
-    : packaged
-      ? PRODUCTION_API_BASE_URL
-      : null
-  const clientId = env.ORCA_CLOUD_CLIENT_ID?.trim() || (packaged ? PRODUCTION_CLIENT_ID : undefined)
+  const custom = saved?.enabled ? validateCustomCloudServer(saved, allowLoopbackHttp) : null
+  if (saved?.enabled && !custom) {
+    return { configured: false, setupMessage: 'The custom cloud server settings are invalid.' }
+  }
+  const apiBaseUrl = cleanEndpointUrl(
+    env.ORCA_CLOUD_API_URL?.trim() || custom?.authServerUrl || PRODUCTION_API_BASE_URL
+  )
+  const clientId = env.ORCA_CLOUD_CLIENT_ID?.trim() || custom?.clientId || PRODUCTION_CLIENT_ID
   if (!apiBaseUrl || !clientId) {
     return {
       configured: false,
@@ -91,7 +103,10 @@ export function getOrcaCloudAuthConfig(
         cleanEndpointUrl(env.ORCA_CLOUD_CONNECTOR_TOKEN_URL) ??
         endpoint(apiBaseUrl, '/v1/desktop/auth/connector-token'),
       relayDirectorUrl:
-        cleanOrigin(env.ORCA_RELAY_URL, allowLoopbackHttp) ?? PRODUCTION_RELAY_DIRECTOR_URL,
+        cleanOrigin(
+          env.ORCA_RELAY_URL?.trim() || custom?.relayDirectorUrl || PRODUCTION_RELAY_DIRECTOR_URL,
+          allowLoopbackHttp
+        ) ?? PRODUCTION_RELAY_DIRECTOR_URL,
       clientId,
       scope: env.ORCA_CLOUD_AUTH_SCOPE?.trim() || DEFAULT_SCOPE
     }

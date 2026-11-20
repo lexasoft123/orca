@@ -45,7 +45,7 @@ describe('Orca cloud auth config read from the installed app environment', () =>
       configured: true,
       config: { apiBaseUrl: 'http://127.0.0.1:8787', clientId: 'local-client' }
     })
-    expect(getOrcaCloudAuthConfig({})).toMatchObject({ configured: false })
+    expect(getOrcaCloudAuthConfig({})).toMatchObject({ configured: true })
   })
 
   it('reads as unpackaged when no app environment is installed, as a bare Node import did', () => {
@@ -54,6 +54,49 @@ describe('Orca cloud auth config read from the installed app environment', () =>
     expect(hasAppEnvironment()).toBe(false)
 
     expect(isOrcaCloudDevAuthEnabled(DEV_OVERRIDES)).toBe(true)
-    expect(getOrcaCloudAuthConfig({})).toMatchObject({ configured: false })
+    expect(getOrcaCloudAuthConfig({})).toMatchObject({ configured: true })
+  })
+})
+
+it('resolves environment overrides before the enabled saved server and production defaults', () => {
+  const saved = {
+    enabled: true,
+    authServerUrl: 'https://auth.example.test',
+    clientId: 'self-hosted',
+    relayDirectorUrl: 'https://relay.example.test'
+  }
+  expect(getOrcaCloudAuthConfig({}, true, saved)).toMatchObject({
+    configured: true,
+    config: {
+      apiBaseUrl: 'https://auth.example.test',
+      clientId: 'self-hosted',
+      relayDirectorUrl: 'https://relay.example.test'
+    }
+  })
+  expect(
+    getOrcaCloudAuthConfig(
+      {
+        ORCA_CLOUD_API_URL: 'https://env.example.test',
+        ORCA_CLOUD_CLIENT_ID: 'environment',
+        ORCA_RELAY_URL: 'https://env-relay.example.test'
+      },
+      true,
+      saved
+    )
+  ).toMatchObject({
+    configured: true,
+    config: {
+      apiBaseUrl: 'https://env.example.test',
+      clientId: 'environment',
+      relayDirectorUrl: 'https://env-relay.example.test'
+    }
+  })
+  expect(getOrcaCloudAuthConfig({}, true, { ...saved, enabled: false })).toMatchObject({
+    configured: true,
+    config: {
+      apiBaseUrl: 'https://login.onorca.dev',
+      clientId: 'orca-desktop',
+      relayDirectorUrl: 'https://relay.onorca.dev'
+    }
   })
 })
