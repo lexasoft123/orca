@@ -1,0 +1,5 @@
+{"stage":"baseline","stats":"{\"elapsedMs\":456.832375,\"cpuMs\":358.543,\"rss\":72737528,\"lagP99Ms\":0.000511,\"lagMaxMs\":0}"}
+{"stage":"checkpoint","pairs":333,"stats":"{\"elapsedMs\":3027.854958,\"cpuMs\":1538.82,\"rss\":125270440,\"lagP99Ms\":18.284543,\"lagMaxMs\":20.938751}"}
+{"stage":"checkpoint","pairs":666,"stats":"{\"elapsedMs\":2955.550667,\"cpuMs\":1366.561,\"rss\":146424488,\"lagP99Ms\":13.197311,\"lagMaxMs\":14.434303}"}
+{"stage":"setup","pairs":833,"seconds":7.103015667,"p50":7.413083999999799,"p95":13.02850000000035,"p99":23.083958000000166,"relayPid":37344}
+{"stage":"idle","pairs":833,"stats":"{\"elapsedMs\":25101.593791,\"cpuMs\":200.254,\"rss\":153290368,\"lagP99Ms\":14.401535,\"lagMaxMs\":19.595263}"}
