@@ -37,7 +37,7 @@ A session object is `{accessToken, refreshToken, expiresAt, cloud, organizations
 
 ## Relay configuration
 
-Build each Dockerfile from the `cloud/` context. The relay-auth Docker image has not been built or tested in this environment because Docker was unavailable. For a combined relay set `ORCA_RELAY_ROLE=combined`, `ORCA_RELAY_PUBLIC_URL` and `ORCA_RELAY_CELL_URL` to its public HTTPS origin, `ORCA_RELAY_AUTH_ISSUER` to the auth public origin, `ORCA_RELAY_AUTH_AUDIENCE=orca-relay`, `ORCA_RELAY_JWKS_URL` to the auth origin's `/.well-known/jwks.json`, `ORCA_RELAY_ASSIGNMENT_SIGNING_KEY` to a separate random secret of at least 32 characters, `ORCA_RELAY_ADMIN_AUDIENCE` to a URL, `ORCA_RELAY_DEPLOY_SERVICE_ACCOUNT` to an email, `ORCA_RELAY_PUBLIC_ASSIGNMENTS_ENABLED=true`, and `ORCA_RELAY_DATA_DIR` to persistent storage. See the relay README for network and operational configuration.
+Build each Dockerfile from the `cloud/` context. Both Docker images were built with Podman 5.4.2 and exercised on a Debian 13 builder (token mint accepted by the relay, tampered token rejected with 401). For a combined relay set `ORCA_RELAY_ROLE=combined`, `ORCA_RELAY_PUBLIC_URL` and `ORCA_RELAY_CELL_URL` to its public HTTPS origin, `ORCA_RELAY_AUTH_ISSUER` to the auth public origin, `ORCA_RELAY_AUTH_AUDIENCE=orca-relay`, `ORCA_RELAY_JWKS_URL` to the auth origin's `/.well-known/jwks.json`, `ORCA_RELAY_ASSIGNMENT_SIGNING_KEY` to a separate random secret of at least 32 characters, `ORCA_RELAY_ADMIN_AUDIENCE` to a URL, `ORCA_RELAY_DEPLOY_SERVICE_ACCOUNT` to an email, `ORCA_RELAY_PUBLIC_ASSIGNMENTS_ENABLED=true`, and `ORCA_RELAY_DATA_DIR` to persistent storage. See the relay README for network and operational configuration.
 
 
 ## Desktop relay end-to-end test
