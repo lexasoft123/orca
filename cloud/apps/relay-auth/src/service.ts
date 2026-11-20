@@ -2,13 +2,13 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual, createCipheriv, c
 import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { getConnInfo } from '@hono/node-server/conninfo'
 import { isIP } from 'node:net'
 import { exportJWK, generateKeyPair, importPKCS8, importSPKI, SignJWT, exportPKCS8, calculateJwkThumbprint } from 'jose'
 import { z } from 'zod'
-import { upstreamOidc, type UpstreamConfig } from './upstream-oidc.js'
+import { allowedEmail, upstreamOidc, type UpstreamConfig } from './upstream-oidc.js'
 
 const token = () => randomBytes(32).toString('base64url')
 const hash = (value: string) => createHash('sha256').update(value).digest('base64url')
@@ -20,9 +20,10 @@ const refreshTtl = 30 * 86400_000
 
 type Config = { issuer: string; clientId: string; secret: string; email: string; userId: string; upstream?: UpstreamConfig; dataDir: string; signingKey?: string; previousPublicKey?: string; trustProxy?: boolean }
 type Identity = { userId: string; email: string; name: string }
-type Session = { id: string; profile: string; expires: number; revoked: number; user_id: string | null; email: string | null; name: string | null }
+type Session = { id: string; profile: string; expires: number; revoked: number; user_id: string | null; email: string | null; name: string | null; email_verified: number | null }
 
 export async function createService(config: Config) {
+  if (config.upstream && !config.upstream.allowAny && !(config.upstream.allowedEmails?.length || config.upstream.allowedDomains?.length)) throw new Error('Upstream requires an allowlist or explicit allowAny')
   mkdirSync(config.dataDir, { recursive: true, mode: 0o700 })
   const keyPath = join(config.dataDir, 'signing-key.pem')
   let pem = config.signingKey
@@ -57,7 +58,7 @@ export async function createService(config: Config) {
   if (!columns.some(column => column.name === 'successor')) db.exec('ALTER TABLE refresh ADD COLUMN successor TEXT')
   for (const table of ['codes', 'sessions']) {
     const fields = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
-    for (const field of ['user_id', 'email', 'name']) if (!fields.some(column => column.name === field)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${field} TEXT`)
+    for (const field of ['user_id', 'email', 'name', 'email_verified']) if (!fields.some(column => column.name === field)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${field} TEXT`)
   }
   db.exec('CREATE TABLE IF NOT EXISTS upstream_states (hash TEXT PRIMARY KEY, params TEXT NOT NULL, verifier TEXT NOT NULL, nonce TEXT NOT NULL, expires INTEGER NOT NULL)')
   const upstream = config.upstream && upstreamOidc(config.upstream, `${config.issuer}/v1/desktop/auth/upstream/callback`)
@@ -96,7 +97,7 @@ export async function createService(config: Config) {
     return { accessToken, refreshToken, expiresAt, ...info(s) }
   }
   const body = async (request: Request) => { try { return await request.json() } catch { return null } }
-  const fail = (error: string, status: 400 | 401 | 403 | 429 | 501 = 400) => Response.json({ error }, { status, headers: { 'Cache-Control': 'no-store' } })
+  const fail = (error: string, status: 400 | 401 | 403 | 429 | 501 | 503 = 400) => { console.info(`relay-auth: reject_${error}`); return Response.json({ error }, { status, headers: { 'Cache-Control': 'no-store' } }) }
   const attempts = new Map<string, number[]>()
   const cleanup = setInterval(purge, 60_000); cleanup.unref()
   const authorize = z.object({ client_id: str, response_type: z.literal('code'), redirect_uri: str, nonce: str, state: str, code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal('S256'), local_profile_id: str })
@@ -108,29 +109,43 @@ export async function createService(config: Config) {
   }
   const completeLogin = (params: NonNullable<ReturnType<typeof validAuth>>, identity: Identity) => {
     const code = token()
-    db.prepare('INSERT INTO codes (hash,challenge,nonce,state,redirect,profile,expires,user_id,email,name) VALUES (?,?,?,?,?,?,?,?,?,?)').run(hash(code), params.code_challenge, params.nonce, params.state, params.redirect_uri, params.local_profile_id, Date.now() + 300_000, identity.userId, identity.email, identity.name)
+    db.prepare('INSERT INTO codes (hash,challenge,nonce,state,redirect,profile,expires,user_id,email,name,email_verified) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(hash(code), params.code_challenge, params.nonce, params.state, params.redirect_uri, params.local_profile_id, Date.now() + 300_000, identity.userId, identity.email, identity.name, identity.userId.startsWith(`${hash(config.upstream?.issuer ?? '')}:`) ? 1 : 0)
     const redirect = new URL(params.redirect_uri); redirect.searchParams.set('code', code); redirect.searchParams.set('state', params.state)
     return redirect.toString()
   }
-  const rate = (c: any) => {
+  const audit = (reason: string) => console.info(`relay-auth: ${reason}`)
+  const identityAllowed = (s: Session) => {
+    if (!config.upstream) return true
+    const prefix = `${hash(config.upstream.issuer)}:`
+    if (s.user_id?.startsWith(prefix)) return Number(s.email_verified) === 1 && !!s.email && allowedEmail(config.upstream, s.email)
+    return !!(config.upstream.keepSecretLogin && config.secret && (!s.user_id || s.user_id === config.userId))
+  }
+  const rate = (c: Context, scope = 'login', globalLimit = 100, limit = 10) => {
     const now = Date.now(); let address = 'unknown'
     try { address = getConnInfo(c).remote.address ?? 'unknown' } catch {}
     if (config.trustProxy) { const forwarded = c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim(); if (forwarded && isIP(forwarded)) address = forwarded }
     const recent = (key: string) => (attempts.get(key) ?? []).filter(t => t > now - 60_000)
-    const key = `ip:${address}`, ip = recent(key), global = recent('global')
-    return { limited: ip.length >= 10 || global.length >= 100, failure: () => { ip.push(now); global.push(now); attempts.set(key, ip); attempts.set('global', global) } }
+    const key = `${scope}:ip:${address}`, globalKey = `${scope}:global`, ip = recent(key), global = recent(globalKey)
+    return { limited: ip.length >= limit || global.length >= globalLimit, failure: () => { ip.push(now); global.push(now); attempts.set(key, ip); if (Number.isFinite(globalLimit)) attempts.set(globalKey, global) } }
   }
   app.get('/healthz', c => c.json({ ok: true }))
   app.get('/.well-known/jwks.json', c => c.json({ keys }))
   app.get('/v1/desktop/auth/authorize', async c => {
     const params = validAuth(c.req.query()); if (!params) return fail('invalid_request')
     if (upstream && !(config.upstream?.keepSecretLogin && config.secret && c.req.query('secret_login') === 'true')) {
+      const limiter = rate(c, 'authorize', Infinity, 30); if (limiter.limited) { audit('authorize_rate_limited'); return fail('rate_limited', 429) }
+      limiter.failure()
+      db.prepare('DELETE FROM upstream_states WHERE expires<=?').run(Date.now())
+      const pending = db.prepare('SELECT COUNT(*) AS count FROM upstream_states').get() as { count: number }
+      if (pending.count >= 10000) { audit('authorize_capacity'); return fail('upstream_busy', 503) }
       const state = token(), verifier = token(), nonce = token()
       try {
         const url = await upstream.authorize(state, nonce, hash(verifier))
+        const current = db.prepare('SELECT COUNT(*) AS count FROM upstream_states').get() as { count: number }
+        if (current.count >= 10000) { audit('authorize_capacity'); return fail('upstream_busy', 503) }
         db.prepare('INSERT INTO upstream_states VALUES (?,?,?,?,?)').run(hash(state), JSON.stringify(params), verifier, nonce, Date.now() + 300_000)
         c.header('Referrer-Policy', 'no-referrer'); return c.redirect(url, 303)
-      } catch { return fail('upstream_unavailable', 401) }
+      } catch { audit('upstream_unavailable'); return fail('upstream_unavailable', 401) }
     }
     c.header('Cache-Control', 'no-store'); c.header('Content-Security-Policy', "default-src 'none'; form-action 'self' http://127.0.0.1:*; base-uri 'none'; frame-ancestors 'none'")
     return c.html('<!doctype html><title>Orca sign in</title><h1>Orca sign in</h1><form method="post"><label>Admin secret <input type="password" name="secret" required autofocus></label><button>Sign in</button></form>')
@@ -142,34 +157,48 @@ export async function createService(config: Config) {
     let form: Record<string, unknown>
     try { form = await c.req.parseBody() } catch { return fail('invalid_request') }
     if (typeof form.secret !== 'string' || !equal(form.secret, config.secret)) {
-      limiter.failure()
+      limiter.failure(); audit('secret_invalid')
       return fail('invalid_credentials', 401)
     }
-    c.header('Referrer-Policy', 'no-referrer')
+    audit('secret_login_success'); c.header('Referrer-Policy', 'no-referrer')
     return c.redirect(completeLogin(params, { userId: config.userId, email: config.email, name: '' }), 303)
   })
   app.get('/v1/desktop/auth/upstream/callback', async c => {
-    const limiter = rate(c); if (limiter.limited) return fail('rate_limited', 429)
+    const limiter = rate(c, 'callback', Infinity); if (limiter.limited) { audit('callback_rate_limited'); return fail('rate_limited', 429) }
     const state = c.req.query('state'), code = c.req.query('code')
     const row = state && state.length <= 2048 ? db.prepare('DELETE FROM upstream_states WHERE hash=? RETURNING *').get(hash(state)) as { params: string; verifier: string; nonce: string; expires: number } | undefined : undefined
-    if (!upstream || !row || row.expires < Date.now() || !code || code.length > 2048) { limiter.failure(); return fail('invalid_grant', 401) }
+    if (!upstream || !row || row.expires <= Date.now()) { limiter.failure(); audit('callback_invalid_state'); return fail('invalid_grant', 401) }
+    let params: NonNullable<ReturnType<typeof validAuth>>
+    try { const parsed = validAuth(JSON.parse(row.params) as Record<string, string>); if (!parsed) throw new Error(); params = parsed } catch { limiter.failure(); audit('callback_invalid_state'); return fail('invalid_grant', 401) }
+    const reject = (reason: string, cancelled = false) => {
+      if (!cancelled) limiter.failure()
+      audit(reason)
+      const redirect = new URL(params.redirect_uri); redirect.searchParams.set('error', cancelled ? 'access_denied' : 'invalid_grant'); redirect.searchParams.set('state', params.state)
+      c.header('Referrer-Policy', 'no-referrer'); return c.redirect(redirect.toString(), 303)
+    }
+    if (c.req.query('error')) return reject('upstream_authorization_error', c.req.query('error') === 'access_denied')
+    if (!code || code.length > 2048) return reject('callback_invalid_code')
     try {
       const identity = await upstream.exchange(code, row.verifier, row.nonce)
-      const params = validAuth(JSON.parse(row.params) as Record<string, string>); if (!params) throw new Error('invalid state')
-      c.header('Referrer-Policy', 'no-referrer'); return c.redirect(completeLogin(params, identity), 303)
-    } catch { limiter.failure(); return fail('invalid_grant', 401) }
+      audit('upstream_login_success'); c.header('Referrer-Policy', 'no-referrer'); return c.redirect(completeLogin(params, identity), 303)
+    } catch (error) {
+      const known = ['invalid_identity', 'invalid_authorized_party', 'invalid_userinfo', 'email_unverified', 'email_not_allowed']
+      return reject(error instanceof Error && known.includes(error.message) ? error.message : 'upstream_validation_failed')
+    }
   })
   app.post('/v1/desktop/auth/session', async c => {
     const raw = await body(c.req.raw)
     const code = z.object({ code: str }).safeParse(raw)
-    const row = code.success ? db.prepare('SELECT * FROM codes WHERE hash=?').get(hash(code.data.code)) as { challenge: string; nonce: string; state: string; redirect: string; profile: string; expires: number; user_id: string | null; email: string | null; name: string | null } | undefined : undefined
+    const row = code.success ? db.prepare('SELECT * FROM codes WHERE hash=?').get(hash(code.data.code)) as { challenge: string; nonce: string; state: string; redirect: string; profile: string; expires: number; user_id: string | null; email: string | null; name: string | null; email_verified: number | null } | undefined : undefined
     if (code.success) db.prepare('DELETE FROM codes WHERE hash=?').run(hash(code.data.code))
     const input = z.object({ code: str, codeVerifier: z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/), nonce: str, state: str, redirectUri: str, localProfileId: str }).safeParse(raw)
     if (!input.success) return fail('invalid_request')
     const p = input.data
     if (!row || row.expires < Date.now() || !equal(row.challenge, hash(p.codeVerifier)) || !equal(row.nonce, p.nonce) || !equal(row.state, p.state) || row.redirect !== p.redirectUri || row.profile !== p.localProfileId) return fail('invalid_grant', 401)
+    const s = { id: randomUUID(), profile: randomUUID(), expires: Date.now() + refreshTtl, revoked: 0, user_id: row.user_id, email: row.email, name: row.name, email_verified: row.email_verified === null ? null : Number(row.email_verified) }
+    if (!identityAllowed(s)) { audit('session_identity_denied'); return fail('invalid_grant', 401) }
     db.exec('BEGIN IMMEDIATE')
-    try { const s = { id: randomUUID(), profile: randomUUID(), expires: Date.now() + refreshTtl, revoked: 0, user_id: row.user_id, email: row.email, name: row.name }; db.prepare('INSERT INTO sessions (id,profile,expires,revoked,user_id,email,name) VALUES (?,?,?,0,?,?,?)').run(s.id, s.profile, s.expires, s.user_id, s.email, s.name); const result = issue(s); db.exec('COMMIT'); return c.json(result) } catch (e) { db.exec('ROLLBACK'); throw e }
+    try { db.prepare('INSERT INTO sessions (id,profile,expires,revoked,user_id,email,name,email_verified) VALUES (?,?,?,0,?,?,?,?)').run(s.id, s.profile, s.expires, s.user_id, s.email, s.name, s.email_verified); const result = issue(s); db.exec('COMMIT'); return c.json(result) } catch (e) { db.exec('ROLLBACK'); throw e }
   })
   app.post('/v1/desktop/auth/refresh', async c => {
     const input = credentials.safeParse(await body(c.req.raw)); if (!input.success) return fail('invalid_request')
@@ -177,6 +206,7 @@ export async function createService(config: Config) {
     try {
       const row = db.prepare('SELECT s.*, r.used, r.rotated_at, r.successor FROM refresh r JOIN sessions s ON s.id=r.session WHERE r.hash=?').get(hash(input.data.refreshToken)) as (Session & { used: number; rotated_at: number | null; successor: string | null }) | undefined
       if (!row || row.revoked || row.expires < Date.now()) { db.exec('COMMIT'); return fail('invalid_grant', 401) }
+      if (!identityAllowed(row)) { db.exec('COMMIT'); audit('session_identity_denied'); return fail('invalid_grant', 401) }
       if (row.used) {
         if (row.rotated_at !== null && row.rotated_at + 60_000 >= Date.now() && row.successor) {
           let next: string
@@ -203,10 +233,10 @@ export async function createService(config: Config) {
   app.post('/v1/desktop/auth/org', c => getSession(bearer(c.req.header('authorization'))) ? fail('organization_not_found', 403) : fail('unauthorized', 401))
   app.post('/v1/desktop/auth/profile', async c => {
     const s = getSession(bearer(c.req.header('authorization'))), input = z.object({ refreshToken: str, orgId: str.optional(), name: str.optional() }).safeParse(await body(c.req.raw))
-    if (!s) return fail('unauthorized', 401); if (!input.success) return fail('invalid_request'); if (input.data.orgId) return fail('organization_not_found', 403)
+    if (!s) return fail('unauthorized', 401); if (!identityAllowed(s)) { audit('session_identity_denied'); return fail('invalid_grant', 401) } if (!input.success) return fail('invalid_request'); if (input.data.orgId) return fail('organization_not_found', 403)
     const refresh = db.prepare('SELECT session FROM refresh WHERE hash=? AND used=0').get(hash(input.data.refreshToken)) as { session: string } | undefined
     if (refresh?.session !== s.id) return fail('invalid_grant', 401)
-    db.exec('BEGIN IMMEDIATE'); try { const next = { ...s, id: randomUUID(), profile: randomUUID(), expires: Date.now() + refreshTtl, revoked: 0 }; db.prepare('INSERT INTO sessions (id,profile,expires,revoked,user_id,email,name) VALUES (?,?,?,0,?,?,?)').run(next.id, next.profile, next.expires, next.user_id, next.email, next.name); const result = issue(next); db.exec('COMMIT'); return c.json(result) } catch (e) { db.exec('ROLLBACK'); throw e }
+    db.exec('BEGIN IMMEDIATE'); try { const next = { ...s, id: randomUUID(), profile: randomUUID(), expires: s.expires, revoked: 0 }; db.prepare('INSERT INTO sessions (id,profile,expires,revoked,user_id,email,name,email_verified) VALUES (?,?,?,0,?,?,?,?)').run(next.id, next.profile, next.expires, next.user_id, next.email, next.name, next.email_verified); const result = issue(next); db.exec('COMMIT'); return c.json(result) } catch (e) { db.exec('ROLLBACK'); throw e }
   })
   app.post('/v1/desktop/auth/logout', async c => {
     const s = getSession(bearer(c.req.header('authorization'))), input = credentials.safeParse(await body(c.req.raw)); if (!s) return fail('unauthorized', 401); if (!input.success) return fail('invalid_request')
