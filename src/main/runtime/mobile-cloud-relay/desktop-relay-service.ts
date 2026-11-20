@@ -163,7 +163,7 @@ export class DesktopRelayService {
       const broker = await this.requireActiveBroker(PHONE_REQUEST_READINESS_WAIT_MS).catch(
         () => null
       )
-      if (!broker?.endpoint) {
+      if (this.stopped || !broker?.endpoint) {
         return { v: 1, relay: null }
       }
       this.assertRelayHost(context, broker)
@@ -203,7 +203,8 @@ export class DesktopRelayService {
     }
     return await this.withTransientDemand(`provision:${context.deviceId}`, async () => {
       const broker = await this.requireActiveBroker(PHONE_REQUEST_READINESS_WAIT_MS)
-      if (!broker.endpoint) {
+      // Readiness may resolve after stop; never bind a surviving LAN device to the retired server.
+      if (this.stopped || !broker.endpoint) {
         throw new Error('relay_control_not_active')
       }
       this.assertRelayHost(context, broker)

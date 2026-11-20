@@ -71,9 +71,8 @@ export function CustomRelayServerSettings(): React.JSX.Element {
       setResult(await window.api.orcaProfiles.testCloudServer(valid))
     } catch {
       setError(true)
-    } finally {
-      setBusy(null)
     }
+    setBusy(null)
   }
   const save = async (): Promise<void> => {
     if (!pending || busy || !state) {
@@ -89,9 +88,8 @@ export function CustomRelayServerSettings(): React.JSX.Element {
       setResult(null)
     } catch {
       setError(true)
-    } finally {
-      setBusy(null)
     }
+    setBusy(null)
   }
 
   return (

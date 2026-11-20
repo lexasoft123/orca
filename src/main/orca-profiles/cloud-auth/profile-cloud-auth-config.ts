@@ -1,3 +1,5 @@
+import { getSavedCloudServerSettings } from './profile-cloud-server-preferences'
+export { installCloudServerSettingsReader } from './profile-cloud-server-preferences'
 import {
   DEFAULT_CLOUD_SERVER,
   validateCustomCloudServer,
@@ -31,12 +33,6 @@ const PRODUCTION_API_BASE_URL = DEFAULT_CLOUD_SERVER.authServerUrl
 const PRODUCTION_CLIENT_ID = DEFAULT_CLOUD_SERVER.clientId
 const PRODUCTION_RELAY_DIRECTOR_URL = DEFAULT_CLOUD_SERVER.relayDirectorUrl
 
-let readCustomServer: () => CustomCloudServerSettings | undefined = () => undefined
-
-export function installCloudServerSettingsReader(reader: typeof readCustomServer): void {
-  readCustomServer = reader
-}
-
 // Packaged main omits NODE_ENV; use packaged status to gate development auth overrides.
 // No installed environment (a bare Node import) reads as unpackaged, as Electron's absent `app` did.
 function isPackagedOrcaBuild(): boolean {
@@ -50,22 +46,43 @@ function endpoint(baseUrl: string, path: string): string {
 export function getOrcaCloudAuthConfig(
   env: NodeJS.ProcessEnv = process.env,
   packaged: boolean = isPackagedOrcaBuild(),
-  saved: CustomCloudServerSettings | undefined = readCustomServer()
+  saved: CustomCloudServerSettings | undefined = getSavedCloudServerSettings()
 ): { configured: true; config: OrcaCloudAuthConfig } | { configured: false; setupMessage: string } {
   // Plain HTTP token endpoints are development-only.
   const allowLoopbackHttp = !packaged
   const cleanEndpointUrl = (value: string | undefined): string | null =>
     cleanUrl(value, allowLoopbackHttp)
-  const custom = saved?.enabled ? validateCustomCloudServer(saved, allowLoopbackHttp) : null
-  if (saved?.enabled && !custom) {
+  const environmentValues = [
+    env.ORCA_CLOUD_API_URL?.trim(),
+    env.ORCA_CLOUD_CLIENT_ID?.trim(),
+    env.ORCA_RELAY_URL?.trim()
+  ]
+  const environmentOverride = environmentValues.some(Boolean)
+  if (environmentOverride && !environmentValues.every(Boolean)) {
+    return {
+      configured: false,
+      setupMessage: 'Set ORCA_CLOUD_API_URL, ORCA_CLOUD_CLIENT_ID and ORCA_RELAY_URL together.'
+    }
+  }
+  const custom =
+    !environmentOverride && saved?.enabled
+      ? validateCustomCloudServer(saved, allowLoopbackHttp)
+      : null
+  if (!environmentOverride && saved?.enabled && !custom) {
     return { configured: false, setupMessage: 'The custom cloud server settings are invalid.' }
   }
   const apiBaseUrl = cleanEndpointUrl(
-    env.ORCA_CLOUD_API_URL?.trim() || custom?.authServerUrl || PRODUCTION_API_BASE_URL
+    environmentOverride
+      ? env.ORCA_CLOUD_API_URL
+      : custom?.authServerUrl || (packaged ? PRODUCTION_API_BASE_URL : undefined)
   )
-  const clientId = env.ORCA_CLOUD_CLIENT_ID?.trim() || custom?.clientId || PRODUCTION_CLIENT_ID
+  const clientId = environmentOverride
+    ? env.ORCA_CLOUD_CLIENT_ID?.trim()
+    : custom?.clientId || (packaged ? PRODUCTION_CLIENT_ID : undefined)
   const relayDirectorUrl = cleanOrigin(
-    env.ORCA_RELAY_URL?.trim() || custom?.relayDirectorUrl || PRODUCTION_RELAY_DIRECTOR_URL,
+    environmentOverride
+      ? env.ORCA_RELAY_URL
+      : custom?.relayDirectorUrl || PRODUCTION_RELAY_DIRECTOR_URL,
     allowLoopbackHttp
   )
   if (!apiBaseUrl || !clientId || !relayDirectorUrl) {
