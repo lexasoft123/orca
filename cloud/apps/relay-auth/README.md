@@ -11,11 +11,12 @@ From `cloud/`, build with `pnpm --filter @orca-cloud/relay-auth build` and start
 - `ORCA_AUTH_DATA_DIR`: persistent directory, default `./data/relay-auth`; contains the SQLite database and generated private key. Restrict access and back it up securely.
 - `ORCA_AUTH_SIGNING_KEY_FILE`: optional PEM PKCS#8 P-256 private key. Otherwise the service generates `signing-key.pem` in the data directory on first start.
 - `ORCA_AUTH_PREVIOUS_PUBLIC_KEY_FILE`: optional PEM SPKI public key retained in JWKS during rotation.
+- `ORCA_AUTH_TRUST_PROXY`: set to `true` only when all clients reach the service through a trusted proxy that overwrites the rightmost `X-Forwarded-For` address; default `false` uses the socket address.
 - `PORT`: listen port, default 8080.
 
 For rotation, preserve the old public key (`openssl pkey -in signing-key.pem -pubout -out previous.pem`), configure its path in `ORCA_AUTH_PREVIOUS_PUBLIC_KEY_FILE`, replace the private key with a fresh PKCS#8 P-256 key, and restart. Keep the old public key available until all issued relay tokens have expired and relay JWKS caches have refreshed. Avoid overlapping rotations before that point. Do not delete the SQLite database or signing key on restart.
 
-The global in-process login limit is ten attempts per minute, independent of proxy headers. Run one auth instance only; the limiter and key initialization are not coordinated across instances. Limit requests and body sizes at the reverse proxy. Rotating refresh tokens are strictly single-use: replay revokes the entire session, including its access tokens. An ambiguous network failure after refresh may therefore require signing in again; the hosted service's retry grace is not implemented.
+Login failures are limited to ten per IP and 100 globally per minute. Run one auth instance only; the limiter and key initialization are not coordinated across instances. The service limits request bodies to 8 KiB; also apply limits at the reverse proxy. Refresh tokens rotate, with a 60-second replay grace for ambiguous network failures; later reuse revokes the session and its access tokens. Successor tokens are encrypted using a key derived from the admin secret during the grace period; changing the secret can disrupt a pending retry.
 
 ## Client contract
 
@@ -23,7 +24,7 @@ All JSON POST responses are JSON, and errors have `{ "error": "code" }`. The ser
 
 - `GET /v1/desktop/auth/authorize`: query `client_id`, `response_type=code`, `redirect_uri`, `scope`, `nonce`, `state`, `code_challenge`, `code_challenge_method=S256`, `local_profile_id`. The loopback redirect must be `http://127.0.0.1:<port>/auth/callback`. The browser submits the admin secret to the same URL as form field `secret`; success redirects to the loopback URI with `code` and `state`. Codes expire after five minutes and are single-use.
 - `POST /v1/desktop/auth/session`: `{code, codeVerifier, nonce, redirectUri, state, localProfileId}`; validates all bindings and S256 PKCE. Returns the session object below.
-- `POST /v1/desktop/auth/refresh`: `{refreshToken}`; rotates the refresh token and returns the session object. Reuse returns `refresh_token_reuse` and revokes the family.
+- `POST /v1/desktop/auth/refresh`: `{refreshToken}`; rotates the refresh token and returns the session object. Replay within 60 seconds returns the current successor; later reuse returns `refresh_token_reuse` and revokes the family.
 - `POST /v1/desktop/auth/capabilities`: bearer access token, `{}`; returns `{cloud, organizations, capabilities}`.
 - `POST /v1/desktop/auth/profile`: bearer access token and `{refreshToken, name?, orgId?}`; validates the current refresh token and returns a new independent profile session. Organization selection is unsupported.
 - `POST /v1/desktop/auth/org`: bearer access token and `{orgId}`; this single-tenant service has no organizations and returns `organization_not_found`.
