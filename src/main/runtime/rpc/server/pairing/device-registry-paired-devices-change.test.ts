@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DeviceRegistry } from './device-registry'
+import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 
 let dir: string
 
@@ -39,5 +40,23 @@ describe('paired device change notifications', () => {
 
     registry.removeDevice(offer.deviceId)
     expect(onChanged).toHaveBeenCalledTimes(2)
+  })
+  it('fires when it adopts a revoke another process wrote to the file', () => {
+    const registry = new DeviceRegistry(dir)
+    const phone = registry.getOrCreatePendingDevice('phone', 'mobile')
+    registry.updateLastSeenDeferred(phone.deviceId, undefined, 'v2')
+    const onChanged = vi.fn()
+    registry.setOnPairedDevicesChanged(onChanged)
+
+    // An admin's script removes the row without going through this process.
+    const registryPath = join(dir, DEVICE_REGISTRY_FILENAME)
+    const rows: { deviceId: string }[] = JSON.parse(readFileSync(registryPath, 'utf8'))
+    writeFileSync(
+      registryPath,
+      JSON.stringify(rows.filter((row) => row.deviceId !== phone.deviceId))
+    )
+    registry.getPendingDevice()
+
+    expect(onChanged).toHaveBeenCalledTimes(1)
   })
 })

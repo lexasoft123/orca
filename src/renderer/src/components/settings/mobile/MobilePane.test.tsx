@@ -316,4 +316,33 @@ describe('MobilePane pairing connection mode', () => {
     expect(getPairingQR).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Couldn’t create a Relay pairing code.')).not.toBeNull()
   })
+  it('keeps the relay recovery for a retry that was already in flight when the relay came back', async () => {
+    const user = userEvent.setup()
+    const outage = {
+      available: false,
+      reason: 'relay_mint_failed',
+      relayFailure: {
+        code: 'relay_assignment_failed_502',
+        stage: 'create_pairing_relay',
+        message: 'Relay assignment failed'
+      }
+    }
+    let finishRetry!: (value: unknown) => void
+    getPairingQR
+      .mockResolvedValueOnce(outage)
+      .mockImplementationOnce(() => new Promise((resolve) => (finishRetry = resolve)))
+    render(<MobilePane />)
+    await user.click(screen.getByRole('button', { name: 'Generate' }))
+    await screen.findByText('Couldn’t create a Relay pairing code.')
+    await waitFor(() => expect(mocks.listeners.relayStatus).not.toBeNull())
+    await user.click(screen.getByRole('button', { name: 'Retry Relay' }))
+    await waitFor(() => expect(getPairingQR).toHaveBeenCalledTimes(2))
+
+    // The relay comes back while the retry is still running; it then fails on the old outage.
+    await act(async () => mocks.listeners.relayStatus!({ status: 'registered' }))
+    await act(async () => finishRetry(outage))
+
+    await waitFor(() => expect(screen.getByTestId('qr')).toHaveTextContent('base64,qr'))
+    expect(getPairingQR).toHaveBeenCalledTimes(3)
+  })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MobileRelayStatusDetail } from '../../../../shared/remote-runtime/relay/mobile-relay-status'
 import type { MobileRelayMintFailure } from '../../../../shared/remote-runtime/relay/mobile-relay-mint-failure'
 
@@ -61,17 +61,26 @@ export function useMobileRelayMintRecovery({
 }): void {
   const { status } = useMobileRelayStatus()
   const previousStatusRef = useRef(status)
-  const recover = useEffectEvent(() => {
-    if (failure !== null && !busy && mintFailureMayClearWhenRelayRecovers(failure)) {
-      onRecover()
-    }
-  })
+  // An edge seen while a mint is in flight waits for it to settle instead of being dropped.
+  const recoveryPendingRef = useRef(false)
 
   useEffect(() => {
     const wasRegistered = previousStatusRef.current === 'registered'
     previousStatusRef.current = status
-    if (!wasRegistered && status === 'registered') {
-      recover()
+    if (status !== 'registered') {
+      recoveryPendingRef.current = false
+    } else if (!wasRegistered) {
+      recoveryPendingRef.current = true
     }
   }, [status])
+
+  useEffect(() => {
+    if (!recoveryPendingRef.current || busy) {
+      return
+    }
+    recoveryPendingRef.current = false
+    if (failure !== null && mintFailureMayClearWhenRelayRecovers(failure)) {
+      onRecover()
+    }
+  })
 }
