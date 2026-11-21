@@ -1145,6 +1145,7 @@
       "permissionWithoutAuto": "Agents without Approve for me",
       "permissionMixed": "Mixed",
       "permissionSurfaceDifference": "Terminals use the agent’s own settings; new chats use {{mode}}.",
+      "permissionModeSurfaceDifference": "Terminals use {{terminal}}; new chats use {{mode}}.",
       "permissionSameAsAll": "Same as all agents",
       "choiceChipRemove": "Remove {{flag}}",
       "choiceChipTooltip": "Added by {{choice}}. Remove it to use the default.",
@@ -1949,6 +1950,36 @@
       "description": "On supported desktop installs, Orca downloads eligible updates on its regular check schedule and restarts to install them automatically.",
       "info": "About automatic updates",
       "installingStatus": "is being installed."
+    },
+    "customRelay": {
+      "title": "Custom relay server",
+      "description": "Choose the cloud auth and relay servers used by this desktop. Sign in after applying a change.",
+      "authUrl": "Auth server URL",
+      "authUrlPlaceholder": "https://login.example.com",
+      "authUrlHint": "The Orca sign-in service (relay-auth), not your identity provider. Usually the same origin as the relay.",
+      "clientId": "Client ID",
+      "clientIdHint": "Must match the sign-in service's ORCA_AUTH_CLIENT_ID (orca-desktop unless changed).",
+      "relayUrl": "Relay director URL",
+      "relayUrlPlaceholder": "https://relay.example.com",
+      "validation": "Use HTTPS URLs and a nonempty client ID. Both URLs must be origins without a path. URLs cannot contain credentials, queries, or fragments. HTTP is allowed only on localhost, 127.0.0.1, or [::1] in unpackaged builds.",
+      "environment": "Environment variables override saved settings. Test connection checks the URLs entered here.",
+      "testing": "Testing connection…",
+      "test": "Test connection",
+      "apply": "Apply changes",
+      "useServer": "Use this server",
+      "authSuccess": "Auth server: connected",
+      "authFailure": "Auth server: no Orca sign-in service found at this URL",
+      "relaySuccess": "Relay director: connected",
+      "relayFailure": "Relay director: connection failed",
+      "invalid": "Enter valid server URLs and a client ID before continuing.",
+      "error": "Could not complete the request. Check the server settings and try again.",
+      "confirmTitle": "Switch cloud servers?",
+      "confirmDescription": "This signs you out and disconnects existing mobile relay pairings. Pair those devices again after signing in to the selected server. Local-only pairings are preserved.",
+      "cancel": "Cancel",
+      "saving": "Switching servers…",
+      "confirm": "Switch servers",
+      "searchOwnRelay": "Your own relay",
+      "searchSelfHosted": "Self-hosted"
     }
   },
   "menu": {
@@ -12935,12 +12966,12 @@
           "notificationPlaygroundDescription": "Dev-only triggers for checking toast layout, recovery actions, and long-copy wrapping.",
           "devOnly": "Dev only",
           "orcaCloud": "Orca Cloud",
-          "orcaCloudDescription": "Dev-only preview of first-party cloud sign-in. Hidden in production; in dev it also appears in the sidebar account switcher once ORCA_CLOUD_API_URL and ORCA_CLOUD_CLIENT_ID are set.",
+          "orcaCloudDescription": "Dev-only preview of first-party cloud sign-in. Hidden in production; in dev it also appears in the sidebar account switcher once ORCA_CLOUD_API_URL, ORCA_CLOUD_CLIENT_ID and ORCA_RELAY_URL are set.",
           "orcaCloudStatus": "Status",
           "orcaCloudSignOut": "Sign out",
           "orcaCloudConnect": "Connect profile",
           "orcaCloudRefresh": "Refresh status",
-          "orcaCloudNotConfigured": "Set ORCA_CLOUD_API_URL and ORCA_CLOUD_CLIENT_ID to preview Orca Cloud sign-in in this dev build.",
+          "orcaCloudNotConfigured": "Set ORCA_CLOUD_API_URL, ORCA_CLOUD_CLIENT_ID and ORCA_RELAY_URL to preview Orca Cloud sign-in in this dev build.",
           "deleteAnywayClicked": "Delete Anyway clicked"
         },
         "EphemeralVmRecipeRow": {
@@ -13098,7 +13129,14 @@
           "localDescription": "Phone must be on this Wi‑Fi or connected through Tailscale. No account needed.",
           "retrying": "Retrying",
           "relayCell": "Relay cell",
-          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account."
+          "relaySignInDetail": "Signs this desktop in to Orca and routes the phone through Orca’s servers. LAN does not need an account.",
+          "ownRelayTitle": "Your own relay",
+          "ownRelayDescription": "Use a relay and sign-in service you run. Phone can be on cellular or any Wi‑Fi.",
+          "ownRelaySetup": "Set up a relay and sign-in service you run in Settings.",
+          "ownRelayUnavailable": "The saved server settings are invalid. Update them below.",
+          "ownRelaySignInDetail": "Signs this desktop in to your server and routes the phone through your relay. LAN does not need an account.",
+          "ownRelayServer": "Server",
+          "ownRelayServerSettings": "Server settings"
         },
         "MobilePairingSetupSection": {
           "title": "Pair a phone",
@@ -27158,8 +27196,6 @@
         "checking": "Checking Slack…",
         "retry": "Try again",
         "settingUp": "Setting up your Slack app…",
-        "reconnect": "Slack no longer accepts this workspace’s token. Paste a new one to reconnect.",
-        "reconnectSubmit": "Reconnect Slack workspace",
         "create": "Create Slack app",
         "waiting": "Waiting for Slack…",
         "waitingDetail": "Finish in Slack. If your workspace needs an admin to approve new apps, {{name}} joins once they do. If they decline, Install again reuses the same app.",
@@ -27187,7 +27223,8 @@
         "tryIt": "Try it in any channel or direct message",
         "connectAnother": "Connect another Slack workspace",
         "connect": "Connect Slack",
-        "openInSlack": "Message it in Slack"
+        "openInSlack": "Message it in Slack",
+        "cancel": "Cancel"
       },
       "connection": {
         "appSettings": "Slack app settings",
@@ -27211,7 +27248,10 @@
         "step3": "Copy the Refresh Token and paste it below.",
         "kept": "Orca Cloud keeps this token encrypted, so your next bots in this workspace need one click.",
         "label": "Configuration refresh token",
-        "accessPasted": "That is the Access Token. Copy the Refresh Token, the one next to it."
+        "accessPasted": "That is the Access Token. Copy the Refresh Token, the one next to it.",
+        "openSettings": "Open Slack app settings",
+        "generate": "Generate a token for this workspace",
+        "copyRefresh": "Copy the Refresh Token"
       },
       "workspaces": {
         "otherTeam": "That token is for another workspace. Orca keeps it for that workspace.",
@@ -27243,7 +27283,6 @@
       "handOff": {
         "confirmMac": "Orca on this Mac creates the Slack app with {{email}}’s token. {{host}} gets only this bot’s app.",
         "confirm": "Orca on this computer creates the Slack app with {{email}}’s token. {{host}} gets only this bot’s app.",
-        "reconnect": "Slack no longer accepts the token {{email}} has for this workspace. Paste a new one to reconnect.",
         "offerMac": "This Mac is signed in to Orca as {{email}}, which already has a token for {{workspace}}.",
         "offer": "This computer is signed in to Orca as {{email}}, which already has a token for {{workspace}}.",
         "use": "Use it →"
@@ -27261,7 +27300,26 @@
         "waitingOn": "Switching to {{name}} needs {{installer}} to approve in Slack.",
         "waiting": "Switching to {{name}} needs approval in Slack."
       },
-      "mentionLine": "Mention <code>@{{name}}</code> in a channel or DM."
+      "mentionLine": "Mention <code>@{{name}}</code> in a channel or DM.",
+      "reconnect": {
+        "expiredTitle": "Slack token expired",
+        "useTitleMac": "Use your Mac’s token?",
+        "useTitle": "Use this computer’s token?",
+        "whyMine": "Each computer keeps its own Slack token. Slack stopped accepting the one {{email}} uses.",
+        "whyHost": "Each computer keeps its own Slack token. Slack stopped accepting the one {{host}} uses.",
+        "why": "Slack stopped accepting this workspace’s saved token.",
+        "submit": "Reconnect",
+        "about": "About Slack tokens",
+        "useDetail": "Use it sets up this bot’s Slack app with {{email}}’s token. {{host}} only gets this bot’s app.",
+        "hostExpiredMac": "<host>{{host}}</host>’s token expired. This Mac’s works.",
+        "hostExpired": "<host>{{host}}</host>’s token expired. This computer’s works.",
+        "pasteInstead": "Paste a token instead",
+        "use": "Use it",
+        "kept": "Orca Cloud keeps the new token encrypted, so your next bots here need one click.",
+        "mineMac": "This Mac’s token expired. Paste a new one.",
+        "mine": "This computer’s token expired. Paste a new one.",
+        "paste": "Paste a new token to reconnect."
+      }
     },
     "whoCanAsk": {
       "searching": "Searching…",
@@ -27536,7 +27594,8 @@
         "removeNote": "People can no longer ask it on GitHub, and its GitHub people are cleared. The Orca app stays installed.",
         "removeConfirm": "Remove",
         "finishSetup": "Finish setup",
-        "orgDescription": "{{repos}} · signed in as @{{login}}"
+        "orgDescription": "{{repos}} · signed in as @{{login}}",
+        "addAccount": "Add another GitHub account"
       },
       "setup": {
         "install": "Install the Orca app",
@@ -27572,6 +27631,8 @@
         "unlink": "Unlink",
         "unlinked": "Add GitHub from a bot’s Connectors to link your account.",
         "descriptionOnHost": "The GitHub user {{host}}’s bots work as and are owned by.",
+        "descriptionPlural": "Your GitHub accounts, so your bots know which comments are yours.",
+        "descriptionOnHostPlural": "The GitHub users {{host}}’s bots work as and are owned by.",
         "linkedAs": "Linked as {{login}}",
         "reconnect": "Reconnect",
         "linkFromApp": "Link GitHub from Orca on a computer paired to {{host}}.",
@@ -28673,6 +28734,12 @@
       "stopped": "Stopped sharing {{name}}",
       "webhookNotShared": "Webhook · not shared",
       "commandNotShared": "Command · not shared",
+      "fileLinkNotShared": "Has a symlink or hard link · not shared",
+      "outsideSkill": "From outside {{project}}",
+      "outsideSkillWith": "From outside {{project}} · {{description}}",
+      "tooLargeNotShared": "Too large · not shared",
+      "unreadableNotShared": "Can't be read · not shared",
+      "overLimitNotShared": "Over the skill limit · not shared",
       "notShared": "Not shared",
       "setupNote": "Setup note",
       "skills": "Skills",
