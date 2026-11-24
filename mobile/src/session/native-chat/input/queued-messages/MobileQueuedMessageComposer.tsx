@@ -153,6 +153,7 @@ export function MobileQueuedMessageComposer({
             : undefined
         }
         onPasteImages={editor.imagesCapable ? (paste) => void images.attachImage(paste) : undefined}
+        onPasteFiles={editor.imagesCapable ? images.attachPastedFiles : undefined}
         isAttaching={images.isAttaching}
         onMicPress={context?.onMicPress}
         micActive={context?.micActive}

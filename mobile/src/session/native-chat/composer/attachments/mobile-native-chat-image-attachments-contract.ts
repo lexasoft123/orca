@@ -12,6 +12,8 @@ export type MobileNativeChatImageAttachments = {
     files: AsyncIterable<PickedMobileFile> | readonly PickedMobileFile[]
   ) => Promise<void>
   readonly attachFiles: () => Promise<void>
+  /** Files pasted into a terminal-backed chat's field; absent for a structured chat, which keeps them as chips of its own. */
+  readonly attachPastedFiles?: (files: readonly File[]) => Promise<void>
   /** The gallery pick, which also takes videos; absent where the chat cannot stream them. */
   readonly attachGallery?: () => Promise<void>
   readonly removeAttachment: (id: string) => void

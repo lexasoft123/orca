@@ -1,3 +1,4 @@
+import { streamPastedFiles } from '../../../../platform/media-picking/pasted-files-as-picked'
 import {
   mobileNativeChatDraftDestination,
   readMobileNativeChatDraftInputs,
@@ -54,6 +55,7 @@ export function useMobileNativeChatImageUpload(args: {
     files: AsyncIterable<PickedMobileFile> | readonly PickedMobileFile[]
   ) => Promise<void>
   attachFiles: () => Promise<void>
+  attachPastedFiles?: (files: readonly File[]) => Promise<void>
   isAttaching: boolean
 } {
   const {
@@ -296,5 +298,11 @@ export function useMobileNativeChatImageUpload(args: {
     [attachStreamedFiles, picker]
   )
 
-  return { attachImage, attachStreamedFiles, attachFiles, isAttaching }
+  return {
+    attachImage,
+    attachStreamedFiles,
+    attachFiles,
+    attachPastedFiles: structuredNativeChat ? undefined : streamPastedFiles(attachStreamedFiles),
+    isAttaching
+  }
 }

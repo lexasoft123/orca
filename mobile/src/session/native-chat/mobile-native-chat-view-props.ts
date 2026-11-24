@@ -72,6 +72,7 @@ export type MobileNativeChatViewProps = MobileNativeChatSendProps &
     onAttachImage?: () => void
     onAttachFiles?: () => void
     onPasteImages?: (paste: MobilePastedImages) => void
+    onPasteFiles?: (files: readonly File[]) => void
     attachments?: PendingNativeChatImage[]
     onRemoveAttachment?: (id: string) => void
     isAttaching?: boolean

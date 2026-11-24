@@ -367,6 +367,7 @@ function MobileNativeChatOverlayContent({
                           ? (paste) => void images.attachImage(paste)
                           : undefined
                       }
+                      onPasteFiles={images.attachPastedFiles}
                       attachments={images.attachments}
                       onRemoveAttachment={images.removeAttachment}
                       isAttaching={images.isAttaching}

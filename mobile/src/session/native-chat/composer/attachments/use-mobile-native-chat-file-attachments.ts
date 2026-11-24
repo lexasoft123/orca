@@ -8,16 +8,10 @@ import {
 } from '../drafts/mobile-native-chat-draft-inputs'
 import { useCallback } from 'react'
 import type { RpcClient } from '../../../../transport/rpc/rpc-client-contract'
-import {
-  blobBase64Chunks,
-  inMemoryBase64Chunks
-} from '../../../../platform/media-picking/picked-file-base64-chunks'
+import { inMemoryBase64Chunks } from '../../../../platform/media-picking/picked-file-base64-chunks'
+import { pastedFilesAsPicked } from '../../../../platform/media-picking/pasted-files-as-picked'
 import { useMediaPicker } from '../../../../platform/media-picking/media-picker'
-import {
-  MOBILE_STREAMED_FILE_MAX_BYTES,
-  MobileFileTooLargeError,
-  type PickedMobileFile
-} from '../../../../platform/media-picking/media-picker-contract'
+import type { PickedMobileFile } from '../../../../platform/media-picking/media-picker-contract'
 import { encodeBase64Bytes } from '../../../../transport/encryption/base64-byte-codec'
 import { agentSessionPastedTextName } from '../../../../../../src/shared/agent-session/agent-session-attachments'
 import { uploadMobileAgentSessionAttachment } from '../../../../files/attachments/mobile-agent-session-attachment-upload'
@@ -141,21 +135,7 @@ export function useMobileNativeChatFileAttachments(args: {
   )
 
   const attachPastedFiles = useCallback(
-    (pasted: readonly File[]) =>
-      attach(async function* () {
-        for (const file of pasted) {
-          const name = file.name.trim() || 'pasted-file'
-          if (file.size > MOBILE_STREAMED_FILE_MAX_BYTES) {
-            throw new MobileFileTooLargeError(name, MOBILE_STREAMED_FILE_MAX_BYTES)
-          }
-          yield {
-            name,
-            mime: file.type || 'application/octet-stream',
-            byteLength: file.size,
-            chunks: () => blobBase64Chunks(file)
-          }
-        }
-      }),
+    (pasted: readonly File[]) => attach(() => pastedFilesAsPicked(pasted)),
     [attach]
   )
 

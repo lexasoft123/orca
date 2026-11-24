@@ -69,6 +69,7 @@ export function MobileNativeChatComposer({
   onAttachImage,
   onAttachFiles,
   onPasteImages,
+  onPasteFiles,
   attachments = NO_ATTACHMENTS,
   onRemoveAttachment,
   isAttaching = false,
@@ -109,7 +110,7 @@ export function MobileNativeChatComposer({
     disabled: disabled || offline || editSession?.locked === true,
     onPasteImages,
     onAttachPastedText: structured?.onAttachPastedText,
-    onPasteFiles: structured?.onPasteFiles
+    onPasteFiles: structured ? structured.onPasteFiles : onPasteImages && onPasteFiles
   })
   // Only a structured chat's sends reach the host's mention context, as on the desktop.
   const mentionBots = useMobileNativeChatMentionBots(!roomMentions && structured !== null)

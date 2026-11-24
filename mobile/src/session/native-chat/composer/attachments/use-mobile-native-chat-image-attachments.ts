@@ -120,7 +120,7 @@ export function useMobileNativeChatImageAttachments({
   const attachments = useMemo(() => [...images], [images])
   const stripAttachments = useNativeChatStripAttachments(scopeKey, images)
 
-  const { attachImage, attachStreamedFiles, attachFiles, isAttaching } =
+  const { attachImage, attachStreamedFiles, attachFiles, attachPastedFiles, isAttaching } =
     useMobileNativeChatImageUpload({
       client,
       activeHandleRef,
@@ -330,6 +330,7 @@ export function useMobileNativeChatImageAttachments({
     attachImage,
     attachStreamedFiles,
     attachFiles,
+    attachPastedFiles,
     removeAttachment,
     sendNativeChat
   }

@@ -47,6 +47,8 @@ export type MobileNativeChatComposerProps = MobileNativeChatMicProps & {
   onAttachFiles?: () => void
   /** Images pasted into the field attach like a Photos pick. */
   onPasteImages?: (paste: MobilePastedImages) => void
+  /** Files pasted into a terminal-backed chat's field attach like a Files pick; a structured chat supplies its own. */
+  onPasteFiles?: (files: readonly File[]) => void
   attachments?: PendingNativeChatImage[]
   onRemoveAttachment?: (id: string) => void
   isAttaching?: boolean
