@@ -29,6 +29,7 @@ import type { MobileNativeChatHostOutage } from './status/mobile-native-chat-hos
 import { MobileMarkdownLinksContext } from '../../components/markdown/links/mobile-markdown-links-context'
 import type { ConnectionState } from '../../transport/connection/connection-state'
 import { useMobileTranslation } from '../../i18n/use-mobile-translation'
+import { mobileNativeChatAttachHandlers } from './composer/attachments/mobile-native-chat-attach-handlers'
 
 type Props = {
   controller: MobileNativeChatController
@@ -118,11 +119,7 @@ function MobileNativeChatOverlayContent({
   hostOutage = null,
   onOpenAccounts
 }: Props): React.JSX.Element {
-  const attachGallery = images.attachGallery ?? (() => images.attachImage('library'))
-  const attachImage = controller.nativeChatAcceptsImages ? () => void attachGallery() : undefined
-  const attachFiles = controller.nativeChatAcceptsImages
-    ? () => void images.attachFiles()
-    : undefined
+  const attachHandlers = mobileNativeChatAttachHandlers(controller.nativeChatAcceptsImages, images)
   const session = controller.nativeChatSession
   const agent = controller.nativeChatAgent ?? ''
   const fullContent = useMobileNativeChatMessageDetail(
@@ -360,8 +357,7 @@ function MobileNativeChatOverlayContent({
                       composerScopeKey={controller.chatComposerScopeKey}
                       draftKey={controller.chatDraftKey}
                       onComposerTextChange={controller.setChatComposerText}
-                      onAttachImage={attachImage}
-                      onAttachFiles={attachFiles}
+                      {...attachHandlers}
                       onPasteImages={
                         controller.nativeChatAcceptsImages
                           ? (paste) => void images.attachImage(paste)
